@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 # Clone the repo
-RUN git clone https://github.com/zaidmukaddam/youtube-api-server.git .
+RUN git clone https://github.com/nikhild64/youtube-api-server.git .
 
 # Install Python dependencies
 RUN pip install --upgrade pip && pip install -r requirements.txt
