@@ -17,6 +17,7 @@ except ImportError:
 
 app = FastAPI(title="YouTube Tools API")
 
+
 class YouTubeTools:
     @staticmethod
     def get_youtube_video_id(url: str) -> Optional[str]:
@@ -47,10 +48,15 @@ class YouTubeTools:
             if not video_id:
                 raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         except Exception:
-            raise HTTPException(status_code=400, detail="Error getting video ID from URL")
+            raise HTTPException(
+                status_code=400, detail="Error getting video ID from URL"
+            )
 
         try:
-            params = {"format": "json", "url": f"https://www.youtube.com/watch?v={video_id}"}
+            params = {
+                "format": "json",
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+            }
             oembed_url = "https://www.youtube.com/oembed"
             query_string = urlencode(params)
             full_url = oembed_url + "?" + query_string
@@ -72,7 +78,9 @@ class YouTubeTools:
                 }
                 return clean_data
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error getting video data: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Error getting video data: {str(e)}"
+            )
 
     @staticmethod
     def get_video_captions(url: str, languages: Optional[List[str]] = None) -> str:
@@ -85,23 +93,31 @@ class YouTubeTools:
             if not video_id:
                 raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         except Exception:
-            raise HTTPException(status_code=400, detail="Error getting video ID from URL")
+            raise HTTPException(
+                status_code=400, detail="Error getting video ID from URL"
+            )
 
         try:
             captions = None
             if languages:
-                captions = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+                captions = YouTubeTranscriptApi.get_transcript(
+                    video_id, languages=languages
+                )
             else:
                 captions = YouTubeTranscriptApi.get_transcript(video_id)
-            
+
             if captions:
                 return " ".join(line["text"] for line in captions)
             return "No captions found for video"
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error getting captions for video: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Error getting captions for video: {str(e)}"
+            )
 
     @staticmethod
-    def get_video_timestamps(url: str, languages: Optional[List[str]] = None) -> List[str]:
+    def get_video_timestamps(
+        url: str, languages: Optional[List[str]] = None
+    ) -> List[str]:
         """Generate timestamps for a YouTube video based on captions."""
         if not url:
             raise HTTPException(status_code=400, detail="No URL provided")
@@ -111,10 +127,14 @@ class YouTubeTools:
             if not video_id:
                 raise HTTPException(status_code=400, detail="Invalid YouTube URL")
         except Exception:
-            raise HTTPException(status_code=400, detail="Error getting video ID from URL")
+            raise HTTPException(
+                status_code=400, detail="Error getting video ID from URL"
+            )
 
         try:
-            captions = YouTubeTranscriptApi.get_transcript(video_id, languages=languages or ["en"])
+            captions = YouTubeTranscriptApi.get_transcript(
+                video_id, languages=languages or ["en"]
+            )
             timestamps = []
             for line in captions:
                 start = int(line["start"])
@@ -122,26 +142,46 @@ class YouTubeTools:
                 timestamps.append(f"{minutes}:{seconds:02d} - {line['text']}")
             return timestamps
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error generating timestamps: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Error generating timestamps: {str(e)}"
+            )
+
 
 class YouTubeRequest(BaseModel):
     url: str
     languages: Optional[List[str]] = None
+
+
+@app.get("/")
+async def get_video_data():
+    """Root endpoint to check if the server is running"""
+    return {"message": "YouTube Tools API is running"}
+
+
+# health
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok"}
+
 
 @app.post("/video-data")
 async def get_video_data(request: YouTubeRequest):
     """Endpoint to get video metadata"""
     return YouTubeTools.get_video_data(request.url)
 
+
 @app.post("/video-captions")
 async def get_video_captions(request: YouTubeRequest):
     """Endpoint to get video captions"""
     return YouTubeTools.get_video_captions(request.url, request.languages)
 
+
 @app.post("/video-timestamps")
 async def get_video_timestamps(request: YouTubeRequest):
     """Endpoint to get video timestamps"""
     return YouTubeTools.get_video_timestamps(request.url, request.languages)
+
 
 if __name__ == "__main__":
     # Use environment variable for port, default to 8000 if not set

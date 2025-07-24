@@ -1,6 +1,18 @@
-fastapi==0.109.0
-uvicorn==0.27.0
-youtube_transcript_api==0.6.1
-gunicorn==21.2.0
-pydantic==1.10.13
-typing-extensions==4.9.0
+fastapi==0.116.1
+uvicorn==0.35.0
+# WARNING: Requirement file [requirements.txt] contains youtube_transcript_api==0.6.1, but package 'youtube_transcript_api' is not installed
+# WARNING: Requirement file [requirements.txt] contains gunicorn==21.2.0, but package 'gunicorn' is not installed   
+pydantic==2.11.7
+typing_extensions==4.14.1
+## The following requirements were added by pip freeze:
+annotated-types==0.7.0
+anyio==4.9.0
+click==8.2.1
+colorama==0.4.6
+h11==0.16.0
+idna==3.10
+pydantic_core==2.33.2
+sniffio==1.3.1
+starlette==0.47.2
+typing-inspection==0.4.1
+yt-dlp==2025.7.21

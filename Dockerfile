@@ -22,4 +22,4 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 EXPOSE 7860
 
 # Run the FastAPI server (assuming app is in `main.py`)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0"]
