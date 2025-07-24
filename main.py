@@ -1,19 +1,12 @@
 import json
 import os
-from urllib.parse import urlparse, parse_qs, urlencode
-from urllib.request import urlopen
+import subprocess
+from urllib.parse import urlparse, parse_qs
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
-
-try:
-    from youtube_transcript_api import YouTubeTranscriptApi
-except ImportError:
-    raise ImportError(
-        "`youtube_transcript_api` not installed. Please install using `pip install youtube_transcript_api`"
-    )
 
 app = FastAPI(title="YouTube Tools API")
 
@@ -21,7 +14,6 @@ app = FastAPI(title="YouTube Tools API")
 class YouTubeTools:
     @staticmethod
     def get_youtube_video_id(url: str) -> Optional[str]:
-        """Function to get the video ID from a YouTube URL."""
         parsed_url = urlparse(url)
         hostname = parsed_url.hostname
 
@@ -39,111 +31,79 @@ class YouTubeTools:
 
     @staticmethod
     def get_video_data(url: str) -> dict:
-        """Function to get video data from a YouTube URL."""
-        if not url:
-            raise HTTPException(status_code=400, detail="No URL provided")
-
         try:
-            video_id = YouTubeTools.get_youtube_video_id(url)
-            if not video_id:
-                raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-        except Exception:
-            raise HTTPException(
-                status_code=400, detail="Error getting video ID from URL"
+            cmd = [
+                "yt-dlp",
+                "--skip-download",
+                "--print-json",
+                url,
+            ]
+            result = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-
-        try:
-            params = {
-                "format": "json",
-                "url": f"https://www.youtube.com/watch?v={video_id}",
+            if result.returncode != 0:
+                raise HTTPException(
+                    status_code=500, detail=f"yt-dlp error: {result.stderr.strip()}"
+                )
+            metadata = json.loads(result.stdout)
+            return {
+                "title": metadata.get("title"),
+                "uploader": metadata.get("uploader"),
+                "duration": metadata.get("duration"),
+                "upload_date": metadata.get("upload_date"),
+                "description": metadata.get("description"),
+                "thumbnail": metadata.get("thumbnail"),
+                "view_count": metadata.get("view_count"),
+                "like_count": metadata.get("like_count"),
+                "channel_url": metadata.get("channel_url"),
             }
-            oembed_url = "https://www.youtube.com/oembed"
-            query_string = urlencode(params)
-            full_url = oembed_url + "?" + query_string
-
-            with urlopen(full_url) as response:
-                response_text = response.read()
-                video_data = json.loads(response_text.decode())
-                clean_data = {
-                    "title": video_data.get("title"),
-                    "author_name": video_data.get("author_name"),
-                    "author_url": video_data.get("author_url"),
-                    "type": video_data.get("type"),
-                    "height": video_data.get("height"),
-                    "width": video_data.get("width"),
-                    "version": video_data.get("version"),
-                    "provider_name": video_data.get("provider_name"),
-                    "provider_url": video_data.get("provider_url"),
-                    "thumbnail_url": video_data.get("thumbnail_url"),
-                }
-                return clean_data
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Error getting video data: {str(e)}"
+                status_code=500, detail=f"Failed to fetch metadata: {str(e)}"
             )
 
     @staticmethod
     def get_video_captions(url: str, languages: Optional[List[str]] = None) -> str:
-        """Get captions from a YouTube video."""
-        if not url:
-            raise HTTPException(status_code=400, detail="No URL provided")
-
         try:
-            video_id = YouTubeTools.get_youtube_video_id(url)
-            if not video_id:
-                raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-        except Exception:
-            raise HTTPException(
-                status_code=400, detail="Error getting video ID from URL"
-            )
-
-        try:
-            captions = None
+            lang_opts = []
             if languages:
-                captions = YouTubeTranscriptApi.get_transcript(
-                    video_id, languages=languages
-                )
-            else:
-                captions = YouTubeTranscriptApi.get_transcript(video_id)
+                lang_opts = ["--sub-lang", ",".join(languages)]
+            cmd = [
+                "yt-dlp",
+                "--skip-download",
+                "--write-auto-sub",
+                "--sub-format",
+                "vtt",
+                "--sub-lang",
+                ",".join(languages or ["en"]),
+                "--output",
+                "%(id)s.%(ext)s",
+                url,
+            ]
+            subprocess.run(cmd, check=True)
 
-            if captions:
-                return " ".join(line["text"] for line in captions)
-            return "No captions found for video"
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Error getting captions for video: {str(e)}"
-            )
-
-    @staticmethod
-    def get_video_timestamps(
-        url: str, languages: Optional[List[str]] = None
-    ) -> List[str]:
-        """Generate timestamps for a YouTube video based on captions."""
-        if not url:
-            raise HTTPException(status_code=400, detail="No URL provided")
-
-        try:
             video_id = YouTubeTools.get_youtube_video_id(url)
-            if not video_id:
-                raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-        except Exception:
-            raise HTTPException(
-                status_code=400, detail="Error getting video ID from URL"
-            )
+            caption_file = f"{video_id}.en.vtt"
+            if not os.path.exists(caption_file):
+                raise HTTPException(status_code=404, detail="Captions not found")
 
-        try:
-            captions = YouTubeTranscriptApi.get_transcript(
-                video_id, languages=languages or ["en"]
-            )
-            timestamps = []
-            for line in captions:
-                start = int(line["start"])
-                minutes, seconds = divmod(start, 60)
-                timestamps.append(f"{minutes}:{seconds:02d} - {line['text']}")
-            return timestamps
+            with open(caption_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            # Clean up file
+            os.remove(caption_file)
+
+            caption_lines = [
+                line.strip()
+                for line in lines
+                if line.strip() and not line.strip().isdigit() and "-->" not in line
+            ]
+            return " ".join(caption_lines)
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(status_code=500, detail=f"yt-dlp error: {e.stderr}")
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Error generating timestamps: {str(e)}"
+                status_code=500, detail=f"Error getting captions: {str(e)}"
             )
 
 
@@ -153,38 +113,26 @@ class YouTubeRequest(BaseModel):
 
 
 @app.get("/")
-async def get_video_data():
-    """Root endpoint to check if the server is running"""
+async def root():
     return {"message": "YouTube Tools API is running"}
 
 
-# health
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+async def health():
     return {"status": "ok"}
 
 
 @app.post("/video-data")
-async def get_video_data(request: YouTubeRequest):
-    """Endpoint to get video metadata"""
+async def video_data(request: YouTubeRequest):
     return YouTubeTools.get_video_data(request.url)
 
 
 @app.post("/video-captions")
-async def get_video_captions(request: YouTubeRequest):
-    """Endpoint to get video captions"""
+async def video_captions(request: YouTubeRequest):
     return YouTubeTools.get_video_captions(request.url, request.languages)
 
 
-@app.post("/video-timestamps")
-async def get_video_timestamps(request: YouTubeRequest):
-    """Endpoint to get video timestamps"""
-    return YouTubeTools.get_video_timestamps(request.url, request.languages)
-
-
 if __name__ == "__main__":
-    # Use environment variable for port, default to 8000 if not set
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     uvicorn.run(app, host=host, port=port)
