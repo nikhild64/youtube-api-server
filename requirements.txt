@@ -1,7 +1,5 @@
 fastapi==0.116.1
 uvicorn==0.35.0
-# WARNING: Requirement file [requirements.txt] contains youtube_transcript_api==0.6.1, but package 'youtube_transcript_api' is not installed
-# WARNING: Requirement file [requirements.txt] contains gunicorn==21.2.0, but package 'gunicorn' is not installed   
 pydantic==2.11.7
 typing_extensions==4.14.1
 ## The following requirements were added by pip freeze:
